@@ -1,0 +1,17 @@
+from django.conf.urls import url
+from rest_framework.routers import DefaultRouter
+
+from . import views
+
+
+router = DefaultRouter()
+router.register('skus/search', views.SKUSearchViewSet, base_name='skus_search')
+
+urlpatterns = [
+    url(r'categories/(?P<category_id>\d+)/skus/$', views.SKUListView.as_view(), name='sku_list'),
+    url(r'categories/(?P<category_id>\d+)/hotskus/$', views.HotSKUListView.as_view(), name='hot_sku_list'),
+    url(r'categories/(?P<pk>\d+)/$', views.CategoryView.as_view(), name='category'),
+    url(r'skus/(?P<sku_id>\d+)/comments/$', views.SKUCommentsListView.as_view(), name='sku_comments'),
+]
+
+urlpatterns += router.urls
