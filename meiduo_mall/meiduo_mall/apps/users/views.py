@@ -1,4 +1,4 @@
-from rest_framework.generics import GenericAPIView, CreateAPIView, RetrieveAPIView
+from rest_framework.generics import GenericAPIView, CreateAPIView, RetrieveAPIView, UpdateAPIView
 from rest_framework.viewsets import GenericViewSet
 from rest_framework import mixins, status
 from rest_framework.views import APIView
@@ -69,80 +69,13 @@ class UserView(CreateAPIView):
     serializer_class = serializers.CreateUserSerializer
 
 
-class SMSTokenView(GenericAPIView):
-    """
-    用户帐号发送短信token
-    """
-    serializer_class = ImageCodeCheckSerializer
-
-    def get(self, request, account):
-        """
-        获取指定帐号的发送短信的token
-        """
-        # 判断图片验证码
-        serializer = self.get_serializer(data=request.query_params)
-        serializer.is_valid(raise_exception=True)
-
-        # 根据account查询User对象
-        user = get_user_by_account(account)
-        if user is None:
-            return Response({'message': '用户不存在'}, status=status.HTTP_404_NOT_FOUND)
-
-        # 生成发送短信的access_token
-        access_token = user.generate_send_sms_code_token()
-
-        # 处理手机号
-        mobile = re.sub(r'(\d{3})\d{4}(\d{4})', r'\1****\2', user.mobile)
-        return Response({'mobile': mobile, 'access_token': access_token})
-
-
-class PasswordTokenView(GenericAPIView):
-    """
-    用户帐号设置密码的token
-    """
-    serializer_class = serializers.CheckSMSCodeSerializer
-
-    def get(self, request, account):
-        """
-        根据用户帐号获取修改密码的token
-        """
-        serializer = self.get_serializer(data=request.query_params)
-        serializer.is_valid(raise_exception=True)
-
-        user = serializer.user
-
-        # 生成修改用户密码的access token
-        access_token = user.generate_set_password_token()
-
-        return Response({'user_id': user.id, 'access_token': access_token})
-
-
-class PasswordViewSet(mixins.UpdateModelMixin, GenericViewSet):
+class ChangePasswordView(UpdateAPIView):
     """
     用户密码
     """
     queryset = User.objects.all()
-
-    def get_permissions(self):
-        """
-        设置权限
-        """
-        if self.action == 'update':
-            return [IsOwner()]
-        else:
-            return [permissions.AllowAny()]
-
-    def get_serializer_class(self):
-        if self.action == 'create':
-            return serializers.ResetPasswordSerializer
-        else:
-            return serializers.ChangePasswordSerializer
-
-    def create(self, request, *args, **kwargs):
-        """
-        重置用户密码
-        """
-        return self.update(request, *args, **kwargs)
+    permission_classes = [IsOwner]
+    serializer_class = serializers.ChangePasswordSerializer
 
 
 class UserDetailView(RetrieveAPIView):
