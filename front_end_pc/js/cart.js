@@ -73,15 +73,31 @@ var vm = new Vue({
                 this.update_count(index, count);
             }
         },
+        // 增加操作
         on_add: function(index){
             var count = this.cart[index].count + 1;
             this.update_count(index, count);
         },
+        // 购物车全选
         on_selected_all: function(){
             var selected = !this.selected_all;
-            for (var i=0; i<this.cart.length;i++){
-                this.cart[i].selected = selected;
-            }
+            axios.put(this.host + '/cart/selection/', {
+                    selected
+                }, {
+                    responseType: 'json',
+                    headers:{
+                        'Authorization': 'JWT ' + this.token
+                    },
+                    withCredentials: true
+                })
+                .then(response => {
+                    for (var i=0; i<this.cart.length;i++){
+                        this.cart[i].selected = selected;
+                    }
+                })
+                .catch(error => {
+                    console.log(error.response.data);
+                })
         },
         // 删除购物车数据
         on_delete: function(index){
@@ -102,6 +118,7 @@ var vm = new Vue({
                     console.log(error.response.data);
                 })
         },
+        // 数量输入框输入操作
         on_input: function(index){
             var val = parseInt(this.cart[index].count);
             if (isNaN(val) || val <= 0) {
@@ -123,7 +140,12 @@ var vm = new Vue({
                         this.cart[index].count = response.data.count;
                     })
                     .catch(error => {
-                        alert(error.response.data.message);
+                        if ('non_field_errors' in error.response.data) {
+                            alert(error.response.data.non_field_errors[0]);
+                        } else {
+                            alert('修改购物车失败');
+                        }
+                        console.log(error.response.data);;
                         this.cart[index].count = this.origin_input;
                     })
             }
@@ -145,7 +167,12 @@ var vm = new Vue({
                     this.cart[index].count = response.data.count;
                 })
                 .catch(error => {
-                    alert(error.response.data.message);
+                    if ('non_field_errors' in error.response.data) {
+                        alert(error.response.data.non_field_errors[0]);
+                    } else {
+                        alert('修改购物车失败');
+                    }
+                    console.log(error.response.data);
                 })
         },
         // 更新购物车数据
@@ -165,7 +192,12 @@ var vm = new Vue({
                     this.cart[index].selected = response.data.selected;
                 })
                 .catch(error => {
-                    alert(error.response.data.message);
+                    if ('non_field_errors' in error.response.data) {
+                        alert(error.response.data.non_field_errors[0]);
+                    } else {
+                        alert('修改购物车失败');
+                    }
+                    console.log(error.response.data);
                 })
         }
     }

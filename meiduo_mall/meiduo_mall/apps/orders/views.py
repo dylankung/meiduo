@@ -10,7 +10,7 @@ from rest_framework.generics import CreateAPIView, ListAPIView
 from rest_framework.exceptions import PermissionDenied
 
 from goods.models import SKU
-from .serializers import OrderSettlementSerializer, OrderCommitSerializer, OrderInfoSerializer
+from .serializers import OrderSettlementSerializer, SaveOrderSerializer, OrderInfoSerializer
 from .serializers import SaveOrderCommentSerializer, OrderGoodsSerializer
 from .models import OrderInfo, OrderGoods
 # Create your views here.
@@ -20,7 +20,7 @@ class OrderSettlementView(APIView):
     """
     订单结算
     """
-    permission_classes = (IsAuthenticated,)
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         """
@@ -29,7 +29,7 @@ class OrderSettlementView(APIView):
         user = request.user
 
         # 从购物车中获取用户勾选要结算的商品信息
-        redis_conn = get_redis_connection('default')
+        redis_conn = get_redis_connection('cart')
         redis_cart = redis_conn.hgetall('cart_%s' % user.id)
         cart_selected = redis_conn.smembers('cart_selected_%s' % user.id)
 
@@ -49,15 +49,24 @@ class OrderSettlementView(APIView):
         return Response(serializer.data)
 
 
+# 上课时讲解，只有保存订单，未包含查询我的订单信息部分
+class SaveOrderView(CreateAPIView):
+    """
+    保存订单
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = SaveOrderSerializer
+
+
 class OrderViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, GenericViewSet):
     """
-    订单
+    订单， 包含保存订单和查询我的订单
     """
-    permission_classes = (IsAuthenticated,)
+    permission_classes = [IsAuthenticated]
 
     def get_serializer_class(self):
         if self.action == 'create':
-            return OrderCommitSerializer
+            return SaveOrderSerializer
         else:
             return OrderInfoSerializer
 

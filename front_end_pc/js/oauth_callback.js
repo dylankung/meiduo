@@ -83,7 +83,7 @@ var vm = new Vue({
 			this.image_code_id = this.generate_uuid();
 
 			// 设置页面中图片验证码img标签的src属性
-			this.image_code_url = this.host + "/verifications/images/" + this.image_code_id + ".jpg";
+			this.image_code_url = this.host + "/image_codes/" + this.image_code_id + "/";
 		},
 		check_pwd: function (){
 			var len = this.password.length;
@@ -135,7 +135,7 @@ var vm = new Vue({
 			}
 	
 			// 向后端接口发送请求，让后端发送短信验证码
-			axios.get(this.host + '/verifications/sms/' + this.mobile + '/?text=' + this.image_code+'&codeId='+ this.image_code_id, {
+			axios.get(this.host + '/sms_codes/' + this.mobile + '/?text=' + this.image_code+'&image_code_id='+ this.image_code_id, {
 					responseType: 'json'
 				})
 				.then(response => {

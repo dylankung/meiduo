@@ -29,7 +29,7 @@ var vm = new Vue({
 		sms_code: '',
 		allow: false
 	},
-	created: function(){
+	mounted: function(){
 		this.generate_image_code();
 	},
 	methods: {
@@ -53,8 +53,9 @@ var vm = new Vue({
 			this.image_code_id = this.generate_uuid();
 
 			// 设置页面中图片验证码img标签的src属性
-			this.image_code_url = this.host + "/verifications/images/" + this.image_code_id + ".jpg";
+			this.image_code_url = this.host + "/image_codes/" + this.image_code_id + "/";
 		},
+		// 检查用户名
 		check_username: function (){
 			var len = this.username.length;
 			if(len<5||len>20) {
@@ -96,6 +97,7 @@ var vm = new Vue({
 				this.error_check_password = false;
 			}		
 		},
+		// 检查手机号
 		check_phone: function (){
 			var re = /^1[345789]\d{9}$/;
 			if(re.test(this.mobile)) {
@@ -161,7 +163,7 @@ var vm = new Vue({
 			}
 	
 			// 向后端接口发送请求，让后端发送短信验证码
-			axios.get(this.host + '/verifications/sms/' + this.mobile + '/?text=' + this.image_code+'&codeId='+ this.image_code_id, {
+			axios.get(this.host + '/sms_codes/' + this.mobile + '/?text=' + this.image_code+'&image_code_id='+ this.image_code_id, {
 					responseType: 'json'
 				})
 				.then(response => {
@@ -226,7 +228,11 @@ var vm = new Vue({
 					})
 					.catch(error=> {
 						if (error.response.status == 400) {
-							this.error_sms_code_message = '短信验证码错误';
+						    if ('non_field_errors' in error.response.data) {
+						    	this.error_sms_code_message = error.response.data.non_field_errors[0];
+							} else {
+                                this.error_sms_code_message = '数据有误';
+							}
 							this.error_sms_code = true;
 						} else {
 							console.log(error.response.data);

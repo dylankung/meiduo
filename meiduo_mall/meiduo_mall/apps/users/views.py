@@ -1,23 +1,20 @@
-from rest_framework.generics import GenericAPIView
+from rest_framework.generics import GenericAPIView, CreateAPIView, RetrieveAPIView
 from rest_framework.viewsets import GenericViewSet
 from rest_framework import mixins, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import permissions
 from django_redis import get_redis_connection
-from rest_framework.decorators import detail_route
+from rest_framework.decorators import action
 import logging
 import re
 from rest_framework_jwt.views import ObtainJSONWebToken
 from rest_framework.permissions import IsAuthenticated
 
-from .models import User, Address
-from .serializers import UserDetailSerializer, CreateUserSerializer, ResetPasswordSerializer, UserAddressSerializer, \
-    AddressTitleSerializer, AddUserBrowsingHistorySerializer
-from .serializers import EmailSerializer, ChangePasswordSerializer
+from .models import User
+from . import serializers
+from verifications.serializers import ImageCodeCheckSerializer
 from meiduo_mall.utils.permissions import IsOwner
-from verifications.utils import check_image_code
-from celery_tasks.email.tasks import send_verify_email
 from .utils import get_user_by_account
 from . import constants
 from goods.models import SKU
@@ -27,53 +24,6 @@ from carts.utils import merge_cart_cookie_to_redis
 
 # Create your views here.
 logger = logging.getLogger('django')
-
-
-class UserViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, GenericViewSet):
-    """
-    用户信息
-    """
-    queryset = User.objects.all()
-
-    def get_serializer_class(self):
-        if self.action == 'create':
-            return CreateUserSerializer
-        else:
-            return UserDetailSerializer
-
-    def get_permissions(self):
-        if self.action == 'create':
-            return [permissions.AllowAny()]
-        else:
-            return [IsOwner()]
-
-    # # 重置密码的另一种实现方案
-    # @detail_route(methods=['post'])
-    # def password(self, request, pk=None):
-    #     user = self.get_object()
-    #     context = self.get_serializer_context()
-    #     serializer = ResetPasswordSerializer(data=request.data, instance=user, context=context)
-    #     serializer.is_valid(raise_exception=True)
-    #     serializer.save()
-    #     return Response(serializer.data)
-
-    @detail_route(methods=['post'])
-    def email(self, request, pk=None):
-        """
-        保存邮箱
-        """
-        user = self.get_object()
-        serializer = EmailSerializer(data=request.data, instance=user)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-
-        # 生成验证邮箱的url
-        verify_url = user.generate_verify_email_url()
-
-        # 发送验证邮箱的邮件
-        send_verify_email.delay(user.email, verify_url)
-
-        return Response(serializer.data)
 
 
 class UsernameCountView(APIView):
@@ -112,19 +62,28 @@ class MobileCountView(APIView):
         return Response(data)
 
 
-class SMSTokenView(APIView):
+class UserView(CreateAPIView):
+    """
+    用户注册
+    """
+    serializer_class = serializers.CreateUserSerializer
+
+
+class SMSTokenView(GenericAPIView):
     """
     用户帐号发送短信token
     """
+    serializer_class = ImageCodeCheckSerializer
+
     def get(self, request, account):
         """
         获取指定帐号的发送短信的token
         """
         # 判断图片验证码
-        response = check_image_code(request)
-        if response is not None:
-            return response
+        serializer = self.get_serializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
 
+        # 根据account查询User对象
         user = get_user_by_account(account)
         if user is None:
             return Response({'message': '用户不存在'}, status=status.HTTP_404_NOT_FOUND)
@@ -137,30 +96,20 @@ class SMSTokenView(APIView):
         return Response({'mobile': mobile, 'access_token': access_token})
 
 
-class PasswordTokenView(APIView):
+class PasswordTokenView(GenericAPIView):
     """
     用户帐号设置密码的token
     """
+    serializer_class = serializers.CheckSMSCodeSerializer
+
     def get(self, request, account):
         """
         根据用户帐号获取修改密码的token
         """
-        # 验证短信验证码
-        sms_code = request.query_params.get('code')
-        if not sms_code:
-            return Response({'message': '缺少短信验证码'}, status=status.HTTP_400_BAD_REQUEST)
+        serializer = self.get_serializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
 
-        # 获取user
-        user = get_user_by_account(account)
-        if user is None:
-            return Response({'message': '用户不存在'}, status=status.HTTP_404_NOT_FOUND)
-
-        redis_conn = get_redis_connection('verify_codes')
-        real_sms_code = redis_conn.get('sms_%s' % user.mobile)
-        if real_sms_code is None:
-            return Response({'message': '无效的短信验证码'}, status=status.HTTP_400_BAD_REQUEST)
-        if sms_code != real_sms_code.decode():
-            return Response({'message': '短信验证码错误'}, status=status.HTTP_400_BAD_REQUEST)
+        user = serializer.user
 
         # 生成修改用户密码的access token
         access_token = user.generate_set_password_token()
@@ -185,15 +134,39 @@ class PasswordViewSet(mixins.UpdateModelMixin, GenericViewSet):
 
     def get_serializer_class(self):
         if self.action == 'create':
-            return ResetPasswordSerializer
+            return serializers.ResetPasswordSerializer
         else:
-            return ChangePasswordSerializer
+            return serializers.ChangePasswordSerializer
 
     def create(self, request, *args, **kwargs):
         """
         重置用户密码
         """
         return self.update(request, *args, **kwargs)
+
+
+class UserDetailView(RetrieveAPIView):
+    """
+    用户详情
+    """
+    serializer_class = serializers.UserDetailSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
+
+
+class EmailView(CreateAPIView):
+    """
+    保存用户邮箱
+    """
+    permission_classes = [IsAuthenticated]
+
+    # 为了让视图的create方法在对序列化器进行save操作时执行序列化器的update方法，更新user的email属性
+    # 所以重写get_serializer方法，在构造序列化器时将请求的user对象传入
+    # 注意：在视图中，可以通过视图对象self中的request属性获取请求对象
+    def get_serializer(self, *args, **kwargs):
+        return serializers.EmailSerializer(self.request.user, data=self.request.data)
 
 
 class VerifyEmailView(APIView):
@@ -216,13 +189,12 @@ class VerifyEmailView(APIView):
             return Response({'message': 'OK'})
 
 
-class UserAddressViewSet(mixins.CreateModelMixin, mixins.UpdateModelMixin, mixins.DestroyModelMixin, GenericViewSet):
+class AddressViewSet(mixins.CreateModelMixin, mixins.UpdateModelMixin, GenericViewSet):
     """
     用户地址新增与修改
     """
-    serializer_class = UserAddressSerializer
-    permissions = [IsOwner]
-    lookup_url_kwarg = 'address_id'
+    serializer_class = serializers.UserAddressSerializer
+    permissions = [IsAuthenticated]
 
     def get_queryset(self):
         return self.request.user.addresses.filter(is_deleted=False)
@@ -232,7 +204,7 @@ class UserAddressViewSet(mixins.CreateModelMixin, mixins.UpdateModelMixin, mixin
         用户地址列表数据
         """
         queryset = self.get_queryset()
-        serializer = UserAddressSerializer(queryset, many=True)
+        serializer = self.get_serializer(queryset, many=True)
         user = self.request.user
         return Response({
             'user_id': user.id,
@@ -252,15 +224,19 @@ class UserAddressViewSet(mixins.CreateModelMixin, mixins.UpdateModelMixin, mixin
 
         return super().create(request, *args, **kwargs)
 
-    def perform_destroy(self, instance):
+    def destroy(self, request, *args, **kwargs):
         """
         处理删除
         """
-        # 进行逻辑删除
-        instance.is_deleted = True
-        instance.save()
+        address = self.get_object()
 
-    @detail_route(methods=['put'])
+        # 进行逻辑删除
+        address.is_deleted = True
+        address.save()
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(methods=['put'], detail=True)
     def status(self, request, pk=None, address_id=None):
         """
         设置默认地址
@@ -270,13 +246,13 @@ class UserAddressViewSet(mixins.CreateModelMixin, mixins.UpdateModelMixin, mixin
         request.user.save()
         return Response({'message': 'OK'}, status=status.HTTP_200_OK)
 
-    @detail_route(methods=['put'])
+    @action(methods=['put'], detail=True)
     def title(self, request, pk=None, address_id=None):
         """
         修改标题
         """
         address = self.get_object()
-        serializer = AddressTitleSerializer(instance=address, data=request.data)
+        serializer = serializers.AddressTitleSerializer(instance=address, data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
@@ -286,40 +262,22 @@ class UserBrowsingHistoryView(mixins.CreateModelMixin, GenericAPIView):
     """
     用户浏览历史记录
     """
-    # serializer_class = AddUserBrowsingHistorySerializer
-    # permission_classes = [IsAuthenticated]
-    #
-    # def post(self, request):
-    #     """
-    #     保存
-    #     """
-    #     return self.create(request)
-    def post(self, request, user_id):
+    serializer_class = serializers.AddUserBrowsingHistorySerializer
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
         """
         保存
         """
-        # 检查user_id是否存在
-        try:
-            User.objects.get(id=user_id)
-        except User.DoesNotExist:
-            return Response({'message': '非法用户'}, status=status.HTTP_400_BAD_REQUEST)
+        return self.create(request)
 
-        s = AddUserBrowsingHistorySerializer(data=request.data, context={'user_id': user_id})
-        s.is_valid(raise_exception=True)
-        s.save()
-        return Response({'message': 'OK'}, status=status.HTTP_201_CREATED)
-
-    def get(self, request, user_id):
+    def get(self, request):
         """
         获取
         """
-        # 检查user_id是否存在
-        try:
-            User.objects.get(id=user_id)
-        except User.DoesNotExist:
-            return Response({'message': '非法用户'}, status=status.HTTP_400_BAD_REQUEST)
+        user_id = request.user.id
 
-        redis_conn = get_redis_connection("default")
+        redis_conn = get_redis_connection("history")
         history = redis_conn.lrange("history_%s" % user_id, 0, constants.USER_BROWSING_HISTORY_COUNTS_LIMIT-1)
         skus = []
         for sku_id in history:
@@ -335,13 +293,14 @@ class UserAuthorizeView(ObtainJSONWebToken):
     用户认证
     """
     def post(self, request, *args, **kwargs):
+        # 调用父类的方法，获取drf jwt扩展默认的认证用户处理结果
         response = super().post(request, *args, **kwargs)
 
-        if request.version == 'v1.1':
-            # 版本1.1 补充合并购物车
-            serializer = self.get_serializer(data=request.data)
-            if serializer.is_valid():
-                user = serializer.validated_data.get('user') or request.user
-                response = merge_cart_cookie_to_redis(request, user, response)
+        # 仿照drf jwt扩展对于用户登录的认证方式，判断用户是否认证登录成功
+        # 如果用户登录认证成功，则合并购物车
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.validated_data.get('user')
+            response = merge_cart_cookie_to_redis(request, user, response)
 
         return response

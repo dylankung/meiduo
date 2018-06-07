@@ -15,3 +15,5 @@ class Payment(BaseModel):
 
     class Meta:
         db_table = 'tb_payment'
+        verbose_name = '支付信息'
+        verbose_name_plural = verbose_name

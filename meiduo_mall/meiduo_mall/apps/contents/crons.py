@@ -52,7 +52,7 @@ def generate_static_index_html():
     contents = {}
     content_categories = ContentCategory.objects.all()
     for cat in content_categories:
-        contents[cat.key] = cat.content_set.filter(status=True)
+        contents[cat.key] = cat.content_set.filter(status=True).order_by('sequence')
 
     # 渲染模板
     context = {

@@ -5,7 +5,6 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.conf import settings
 from alipay import AliPay
-import time
 import os
 
 from orders.models import OrderInfo
@@ -18,11 +17,11 @@ class PaymentView(APIView):
     """
     支付
     """
-    permission_classes = (IsAuthenticated,)
+    permission_classes = [IsAuthenticated]
 
-    def post(self, request, order_id):
+    def get(self, request, order_id):
         """
-        创建支付
+        获取支付链接
         """
         # 判断订单信息是否正确
         try:
@@ -37,7 +36,8 @@ class PaymentView(APIView):
             appid=settings.ALIPAY_APPID,
             app_notify_url=None,  # 默认回调url
             app_private_key_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "keys/app_private_key.pem"),
-            alipay_public_key_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "keys/alipay_public_key.pem"),  # 支付宝的公钥，验证支付宝回传消息使用，不是你自己的公钥,
+            alipay_public_key_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                "keys/alipay_public_key.pem"),  # 支付宝的公钥，验证支付宝回传消息使用，不是你自己的公钥,
             sign_type="RSA2",  # RSA 或者 RSA2
             debug=settings.ALIPAY_DEBUG  # 默认False
         )
@@ -48,52 +48,11 @@ class PaymentView(APIView):
             subject="美多商城%s" % order_id,
             return_url="http://www.meiduo.site:8080/pay_success.html",
         )
-        alipay_url = settings.ALIPAY_URL + "?" + order_string
-        return Response({'alipay_url': alipay_url}, status=status.HTTP_201_CREATED)
 
-    # def get(self, request, order_id):
-    #     """
-    #     查询支付结果
-    #     """
-    #     # 判断订单信息是否正确
-    #     try:
-    #         order = OrderInfo.objects.get(order_id=order_id, user=request.user,
-    #                                       pay_method=OrderInfo.PAY_METHODS_ENUM["ALIPAY"],
-    #                                       status=OrderInfo.ORDER_STATUS_ENUM["UNPAID"])
-    #     except OrderInfo.DoesNotExist:
-    #         return Response({'message': '订单信息有误'}, status=status.HTTP_400_BAD_REQUEST)
-    #
-    #     # 构造支付宝支付链接地址
-    #     alipay = AliPay(
-    #         appid=settings.ALIPAY_APPID,
-    #         app_notify_url=None,  # 默认回调url
-    #         app_private_key_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),
-    #                                           "keys/app_private_key.pem"),
-    #         alipay_public_key_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),
-    #                                             "keys/alipay_public_key.pem"),  # 支付宝的公钥，验证支付宝回传消息使用，不是你自己的公钥,
-    #         sign_type="RSA2",  # RSA 或者 RSA2
-    #         debug=settings.ALIPAY_DEBUG  # 默认False
-    #     )
-    #
-    #     # 查询支付结果
-    #     while True:
-    #         result = alipay.api_alipay_trade_query(order_id)
-    #         print(result)
-    #         trade_status = result.get("trade_status")
-    #         if result.get("code") != "10000" or trade_status == "WAIT_BUYER_PAY":
-    #             time.sleep(10)
-    #             continue
-    #         elif trade_status == "TRADE_SUCCESS":
-    #             order.status = OrderInfo.ORDER_STATUS_ENUM["UNCOMMENT"]
-    #             order.save()
-    #             trade_no = result.get('trade_no')
-    #             Payment.objects.create(
-    #                 order=order,
-    #                 trade_id=trade_no
-    #             )
-    #             return Response({'message': 'success', 'trade_no': trade_no})
-    #         else:
-    #             return Response({'message': 'fail'})
+        # 需要跳转到https://openapi.alipay.com/gateway.do? + order_string
+        # 拼接链接返回前端
+        alipay_url = settings.ALIPAY_URL + "?" + order_string
+        return Response({'alipay_url': alipay_url})
 
 
 class PaymentStatusView(APIView):
@@ -124,7 +83,7 @@ class PaymentStatusView(APIView):
                 order_id=order_id,
                 trade_id=trade_id
             )
-            OrderInfo.objects.filter(order_id=order_id).update(status=OrderInfo.ORDER_STATUS_ENUM["UNCOMMENT"])
+            OrderInfo.objects.filter(order_id=order_id, status=OrderInfo.ORDER_STATUS_ENUM['UNPAID']).update(status=OrderInfo.ORDER_STATUS_ENUM["UNCOMMENT"])
             return Response({'trade_id': trade_id})
         else:
-            return Response({'message': '参数错误'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'message': '非法请求'}, status=status.HTTP_403_FORBIDDEN)

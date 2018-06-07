@@ -20,9 +20,9 @@ class OAuthQQ(object):
         self.app_id = app_id or settings.QQ_APP_ID
         self.app_key = app_key or settings.QQ_APP_KEY
         self.redirect_url = redirect_uri or settings.QQ_REDIRECT_URL
-        self.state = state or '/'  # 用于保存登录成功后的跳转页面路径
+        self.state = state or settings.QQ_STATE  # 用于保存登录成功后的跳转页面路径
 
-    def get_auth_url(self):
+    def get_qq_login_url(self):
         """
         获取qq登录的网址
         :return: url网址

@@ -1,7 +1,6 @@
 from rest_framework import serializers
 from django_redis import get_redis_connection
 
-from meiduo_mall.utils.constants import REGEX_MOBILE
 from .utils import OAuthQQ
 from users.models import User
 from .models import OAuthQQUser
@@ -11,10 +10,10 @@ class OAuthQQUserSerializer(serializers.Serializer):
     """
     QQ登录创建用户序列化器
     """
-    access_token = serializers.CharField(label='操作凭证', required=True)
-    mobile = serializers.RegexField(label='手机号', regex=REGEX_MOBILE, required=True)
-    password = serializers.CharField(label='密码', max_length=20, min_length=8, required=True)
-    sms_code = serializers.CharField(label='短信验证码', required=True)
+    access_token = serializers.CharField(label='操作凭证')
+    mobile = serializers.RegexField(label='手机号', regex=r'^1[3-9]\d{9}$')
+    password = serializers.CharField(label='密码', max_length=20, min_length=8)
+    sms_code = serializers.CharField(label='短信验证码')
 
     def validate(self, data):
         # 检验access_token

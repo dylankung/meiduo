@@ -41,7 +41,7 @@ var vm = new Vue({
             this.check_pwd();
             
             if (this.error_username == false && this.error_pwd == false) {
-                axios.post(this.host+'/authorizations/?version=v1.1', {
+                axios.post(this.host+'/authorizations/', {
                         username: this.username,
                         password: this.password
                     }, {
@@ -72,7 +72,11 @@ var vm = new Vue({
                         location.href = return_url;
                     })
                     .catch(error => {
-                        this.error_pwd_message = '用户名或密码错误';
+                        if (error.response.status == 400) {
+                            this.error_pwd_message = '用户名或密码错误';
+                        } else {
+                            this.error_pwd_message = '服务器错误';
+                        }
                         this.error_pwd = true;
                     })
             }
@@ -84,7 +88,7 @@ var vm = new Vue({
                     responseType: 'json'
                 })
                 .then(response => {
-                    location.href = response.data.auth_url;
+                    location.href = response.data.login_url;
                 })
                 .catch(error => {
                     console.log(error.response.data);

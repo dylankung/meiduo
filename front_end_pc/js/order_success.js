@@ -39,38 +39,21 @@ var vm = new Vue({
             }
             return null;
         },
+        // 去支付
         next_operate: function(){
             if (this.pay_method == 1) {
                 location.href = '/index.html';
             } else {
                 // 发起支付
-                axios.post(this.host+'/orders/'+this.order_id+'/payment/', {}, {
+                axios.get(this.host+'/orders/'+this.order_id+'/payment/', {
                         headers: {
                             'Authorization': 'JWT ' + this.token
                         },
                         responseType: 'json'
                     })
                     .then(response => {
-                        // window.open(response.data.alipay_url);
+                        // 跳转到支付宝支付
                         location.href = response.data.alipay_url;
-                        // // 开始查询支付结果
-                        // axios.get(this.host+'/orders/'+this.order_id+'/payment/', {
-                        //         headers: {
-                        //             'Authorization': 'JWT ' + this.token
-                        //         },
-                        //         responseType: 'json'
-                        //     })
-                        //     .then(response => {
-                        //         if(response.data.message === 'success') {
-                        //             alert('支付成功');
-                        //             location.href = '/user_center_order.html';
-                        //         } else {
-                        //             alert('支付失败');
-                        //         }
-                        //     })
-                        //     .catch(error => {
-                        //         console.log(error.response.data);
-                        //     })
                     })
                     .catch(error => {
                         console.log(error.response.data);

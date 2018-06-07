@@ -67,7 +67,7 @@ var vm = new Vue({
 			this.image_code_id = this.generate_uuid();
 
 			// 设置页面中图片验证码img标签的src属性
-			this.image_code_url = this.host + "/verifications/images/" + this.image_code_id + ".jpg";
+			this.image_code_url = this.host + "/image_codes/" + this.image_code_id + "/";
         },
         // 检查数据
         check_username: function(){
@@ -101,7 +101,7 @@ var vm = new Vue({
             this.check_image_code();
 
             if (this.error_username == false && this.error_image_code == false) {
-                axios.get(this.host+'/accounts/' + this.username + '/sms/token/?text='+ this.image_code + '&codeId=' + this.image_code_id, {
+                axios.get(this.host+'/accounts/' + this.username + '/sms/token/?text='+ this.image_code + '&image_code_id=' + this.image_code_id, {
                         responseType: 'json'
                     })
                     .then(response => {
@@ -133,7 +133,7 @@ var vm = new Vue({
                 return;
             } 
             this.sending_flag = true;
-            axios.get(this.host+'/verifications/sms/?access_token='+ this.access_token, {
+            axios.get(this.host+'/sms_codes/?access_token='+ this.access_token, {
                     responseType: 'json'
                 })
                 .then(response => {
@@ -165,7 +165,7 @@ var vm = new Vue({
         form_2_on_submit: function(){
             this.check_sms_code();
             if (this.error_sms_code == false) {
-                axios.get(this.host + '/accounts/' + this.username + '/password/token/?code=' + this.sms_code, {
+                axios.get(this.host + '/accounts/' + this.username + '/password/token/?sms_code=' + this.sms_code, {
                         responseType: 'json'
                     })
                     .then(response => {

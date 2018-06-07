@@ -17,7 +17,7 @@ var vm = new Vue({
     mounted: function(){
         // 判断用户的登录状态
         if (this.user_id && this.token) {
-            axios.get(this.host + '/users/' + this.user_id + '/', {
+            axios.get(this.host + '/user/', {
                     headers: {
                         'Authorization': 'JWT ' + this.token
                     },
@@ -30,7 +30,12 @@ var vm = new Vue({
                     this.mobile = response.data.mobile;
                     this.email = response.data.email;
                     this.email_active = response.data.email_active;
-                    axios.get(this.host + /users/ + this.user_id + '/histories/', {
+
+                    // 请求浏览历史记录
+                    axios.get(this.host + '/browse_histories/', {
+                            headers: {
+                                'Authorization': 'JWT ' + this.token
+                            },
                             responseType: 'json'
                         })
                         .then(response => {
@@ -41,7 +46,9 @@ var vm = new Vue({
                         })
                 })
                 .catch(error => {
-                    location.href = '/login.html?next=/user_center_info.html';
+                    if (error.response.status==401 || error.response.status==403) {
+                        location.href = '/login.html?next=/user_center_info.html';
+                    }
                 });
         } else {
             location.href = '/login.html?next=/user_center_info.html';
@@ -63,7 +70,7 @@ var vm = new Vue({
                 this.email_error = true;
                 return;
             }
-            axios.post(this.host + '/users/'+ this.user_id +'/email/',
+            axios.post(this.host + '/emails/',
                 { email: this.email },
                 {
                     headers: {

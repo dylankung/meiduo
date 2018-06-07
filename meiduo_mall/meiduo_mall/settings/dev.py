@@ -119,6 +119,10 @@ DATABASES = {
 }
 
 
+# 数据库读写分离路由器
+DATABASE_ROUTERS = ['meiduo_mall.utils.db_router.MasterSlaveDBRouter']
+
+
 # Password validation
 # https://docs.djangoproject.com/en/1.11/ref/settings/#auth-password-validators
 
@@ -176,28 +180,38 @@ CACHES = {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         }
     },
-    "verify_codes": {
+    "session": {
         "BACKEND": "django_redis.cache.RedisCache",
         "LOCATION": "redis://10.211.55.5:6379/1",
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         }
     },
-    "cart": {
+    "verify_codes": {
         "BACKEND": "django_redis.cache.RedisCache",
         "LOCATION": "redis://10.211.55.5:6379/2",
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         }
     },
-    "browse_history": {
+    "history": {
         "BACKEND": "django_redis.cache.RedisCache",
         "LOCATION": "redis://10.211.55.5:6379/3",
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         }
     },
+    "cart": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://10.211.55.5:6379/4",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
+    }
 }
+
+SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+SESSION_CACHE_ALIAS = "session"
 
 
 # 日志系统
@@ -238,26 +252,14 @@ LOGGING = {
             'handlers': ['console', 'file'],
             'propagate': True,
         },
-        # 'django.request': {
-        #     'handlers': ['mail_admins'],
-        #     'level': 'INFO',
-        #     'propagate': False,
-        # },
     }
 }
 
 
 # REST framework
 REST_FRAMEWORK = {
-    # 渲染类
-    'DEFAULT_RENDERER_CLASSES': (
-        'rest_framework.renderers.JSONRenderer',
-        'rest_framework.renderers.BrowsableAPIRenderer',
-    ),
-
-    # 'DEFAULT_PERMISSION_CLASSES': (
-    #     'rest_framework.permissions.IsAuthenticated',
-    # ),
+    # 异常处理
+    'EXCEPTION_HANDLER': 'meiduo_mall.utils.exceptions.exception_handler',
 
     # 认证类
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -265,15 +267,6 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.SessionAuthentication',
         'rest_framework.authentication.BasicAuthentication',
     ),
-
-    # 版本类
-    'DEFAULT_VERSIONING_CLASS': 'rest_framework.versioning.QueryParameterVersioning',
-
-    # 未指明字段错误返回的信息键
-    'NON_FIELD_ERRORS_KEY': 'message',
-
-    # 异常处理
-    'EXCEPTION_HANDLER': 'meiduo_mall.utils.exceptions.exception_handler',
 
     # 分页
     'DEFAULT_PAGINATION_CLASS': 'meiduo_mall.utils.pagination.StandardResultsSetPagination',
@@ -292,7 +285,8 @@ REST_FRAMEWORK_EXTENSIONS = {
 CORS_ORIGIN_WHITELIST = (
     '127.0.0.1:8080',
     'localhost:8080',
-    'www.meiduo.site:8080'
+    'www.meiduo.site:8080',
+    'api.meiduo.site:8000'
 )
 CORS_ALLOW_CREDENTIALS = True
 
@@ -330,7 +324,7 @@ CRONJOBS = [
     ('*/5 * * * *', 'contents.crons.generate_static_index_html', '>> /Users/delron/Desktop/meiduo_mall/logs/crontab.log')
 ]
 # 解决crontab中文问题
-CRONTAB_COMMAND_PREFIX = 'LANG=zh_cn.UTF-8'
+CRONTAB_COMMAND_PREFIX = 'LANG_ALL=zh_cn.UTF-8'
 
 
 # 富文本编辑器ckeditor配置
@@ -360,11 +354,10 @@ HAYSTACK_SIGNAL_PROCESSOR = 'haystack.signals.RealtimeSignalProcessor'
 QQ_APP_ID = '101474184'
 QQ_APP_KEY = 'c6ce949e04e12ecc909ae6a8b09b637c'
 QQ_REDIRECT_URL = 'http://www.meiduo.site:8080/oauth_callback.html'
+QQ_STATE = '/'
 
 # 支付宝
 ALIPAY_APPID = "2016081600258081"
 ALIPAY_URL = "https://openapi.alipaydev.com/gateway.do"
 ALIPAY_DEBUG = True
 
-# XADMIN_TITLE = '美多商城运营管理后台'
-# XADMIN_FOOTER_TITLE = '美多商城集团有限公司'

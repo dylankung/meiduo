@@ -1,6 +1,5 @@
 from rest_framework import serializers
 from django_redis import get_redis_connection
-from redis.exceptions import RedisError
 from rest_framework_jwt.settings import api_settings
 import re
 import logging
@@ -8,6 +7,8 @@ import logging
 from .models import User, Address
 from goods.models import SKU
 from . import constants
+from .utils import get_user_by_account
+from celery_tasks.email.tasks import send_verify_email
 
 
 logger = logging.getLogger('django')
@@ -17,14 +18,37 @@ class CreateUserSerializer(serializers.ModelSerializer):
     """
     创建用户序列化器
     """
-    password2 = serializers.CharField(label='确认密码', required=True, allow_null=False, allow_blank=False, write_only=True)
-    sms_code = serializers.CharField(label='短信验证码', required=True, allow_null=False, allow_blank=False, write_only=True)
-    allow = serializers.CharField(label='同意协议', required=True, allow_null=False, allow_blank=False, write_only=True)
+    password2 = serializers.CharField(label='确认密码', write_only=True)
+    sms_code = serializers.CharField(label='短信验证码', write_only=True)
+    allow = serializers.CharField(label='同意协议', write_only=True)
     token = serializers.CharField(label='登录状态token', read_only=True)
+
+    class Meta:
+        model = User
+        fields = ('id', 'username', 'password', 'password2', 'sms_code', 'mobile', 'allow', 'token')
+        extra_kwargs = {
+            'username': {
+                'min_length': 5,
+                'max_length': 20,
+                'error_messages': {
+                    'min_length': '仅允许5-20个字符的用户名',
+                    'max_length': '仅允许5-20个字符的用户名',
+                }
+            },
+            'password': {
+                'write_only': True,
+                'min_length': 8,
+                'max_length': 20,
+                'error_messages': {
+                    'min_length': '仅允许8-20个字符的密码',
+                    'max_length': '仅允许8-20个字符的密码',
+                }
+            }
+        }
 
     def validate_mobile(self, value):
         """验证手机号"""
-        if not re.match(r'^1[345789]\d{9}$', value):
+        if not re.match(r'^1[3-9]\d{9}$', value):
             raise serializers.ValidationError('手机号格式错误')
         return value
 
@@ -73,52 +97,43 @@ class CreateUserSerializer(serializers.ModelSerializer):
 
         return user
 
-    class Meta:
-        model = User
-        fields = ('id', 'username', 'password', 'password2', 'sms_code', 'mobile', 'allow', 'token')
-        extra_kwargs = {
-            'id': {'read_only': True},
-            'username': {
-                'min_length': 5,
-                'max_length': 20,
-                'error_messages': {
-                    'min_length': '仅允许5-20个字符的用户名',
-                    'max_length': '仅允许5-20个字符的用户名',
-                }
-            },
-            'password': {
-                'write_only': True,
-                'min_length': 8,
-                'max_length': 20,
-                'error_messages': {
-                    'min_length': '仅允许8-20个字符的密码',
-                    'max_length': '仅允许8-20个字符的密码',
-                }
-            }
-        }
 
+class CheckSMSCodeSerializer(serializers.Serializer):
+    """
+    检查sms code
+    """
+    sms_code = serializers.CharField(min_length=6, max_length=6)
 
-class UserDetailSerializer(serializers.ModelSerializer):
-    """
-    用户详细信息序列化器
-    """
-    class Meta:
-        model = User
-        fields = ('id', 'username', 'mobile', 'email', 'email_active')
+    def validate_sms_code(self, value):
+        account = self.context['view'].kwargs['account']
+        # 获取user
+        user = get_user_by_account(account)
+        if user is None:
+            raise serializers.ValidationError('用户不存在')
+
+        # 把user 对象保存到序列化器对象中
+        self.user = user
+
+        redis_conn = get_redis_connection('verify_codes')
+        real_sms_code = redis_conn.get('sms_%s' % user.mobile)
+        if real_sms_code is None:
+            raise serializers.ValidationError('无效的短信验证码')
+        if value != real_sms_code.decode():
+            raise serializers.ValidationError('短信验证码错误')
+        return value
 
 
 class ResetPasswordSerializer(serializers.ModelSerializer):
     """
     重置密码序列化器
     """
-    password2 = serializers.CharField(label='确认密码', required=True, allow_blank=False, allow_null=False, write_only=True)
-    access_token = serializers.CharField(label='操作token', required=True, allow_blank=False, allow_null=False, write_only=True)
+    password2 = serializers.CharField(label='确认密码', write_only=True)
+    access_token = serializers.CharField(label='操作token', write_only=True)
 
     class Meta:
         model = User
         fields = ('id', 'password', 'password2', 'access_token')
         extra_kwargs = {
-            'id': {'read_only': True},
             'password': {
                 'write_only': True,
                 'min_length': 8,
@@ -155,31 +170,38 @@ class ResetPasswordSerializer(serializers.ModelSerializer):
         return instance
 
 
+class UserDetailSerializer(serializers.ModelSerializer):
+    """
+    用户详细信息序列化器
+    """
+    class Meta:
+        model = User
+        fields = ('id', 'username', 'mobile', 'email', 'email_active')
+
+
 class EmailSerializer(serializers.ModelSerializer):
-    """
-    邮箱序列化器
-    """
     class Meta:
         model = User
         fields = ('id', 'email')
         extra_kwargs = {
-            'id': {'read_only': True},
+            'email': {
+                'required': True
+            }
         }
-
-    def validate_email(self, value):
-        """
-        检查email格式
-        """
-        if not re.match(r'^[a-z0-9][\w\.\-]*@[a-z0-9\-]+(\.[a-z]{2,5}){1,2}$', value):
-            raise serializers.ValidationError('邮箱格式错误')
-        return value
 
     def update(self, instance, validated_data):
         """
-        保存email
+        重写更新方法，添加发送邮件
+        instance 是 user对象
         """
-        instance.email = validated_data['email']
+        email = validated_data['email']
+        instance.email = email
         instance.save()
+
+        # 生成激活链接
+        verify_url = instance.generate_verify_email_url()
+        # 发送验证邮件
+        send_verify_email.delay(email, verify_url)
         return instance
 
 
@@ -250,16 +272,8 @@ class UserAddressSerializer(serializers.ModelSerializer):
         """
         验证手机号
         """
-        if not re.match(r'^1[345789]\d{9}$', value):
+        if not re.match(r'^1[3-9]\d{9}$', value):
             raise serializers.ValidationError('手机号格式错误')
-        return value
-
-    def validate_email(self, value):
-        """
-        检查email格式
-        """
-        if value and not re.match(r'^[a-z0-9][\w\.\-]*@[a-z0-9\-]+(\.[a-z]{2,5}){1,2}$', value):
-            raise serializers.ValidationError('邮箱格式错误')
         return value
 
     def create(self, validated_data):
@@ -279,43 +293,11 @@ class AddressTitleSerializer(serializers.ModelSerializer):
         fields = ('title',)
 
 
-# class AddUserBrowsingHistorySerializer(serializers.Serializer):
-#     """
-#     添加用户浏览历史序列化器
-#     """
-#     sku_id = serializers.IntegerField(label="商品SKU编号", min_value=1, required=True)
-#
-#     def validate_sku_id(self, value):
-#         """
-#         检验sku_id是否存在
-#         """
-#         try:
-#             SKU.objects.get(id=value)
-#         except SKU.DoesNotExist:
-#             raise serializers.ValidationError('该商品不存在')
-#         return value
-#
-#     def create(self, validated_data):
-#         """
-#         保存
-#         """
-#         user_id = self.context['user_id']
-#         sku_id = validated_data['sku_id']
-#         redis_conn = get_redis_connection("default")
-#         # 移除已经存在的本商品浏览记录
-#         redis_conn.lrem("history_%s" % user_id, 0, sku_id)
-#         # 添加新的浏览记录
-#         redis_conn.lpush("history_%s" % user_id, sku_id)
-#         # 只保存最多5条记录
-#         redis_conn.ltrim("history_%s" % user_id, 0, constants.USER_BROWSING_HISTORY_COUNTS_LIMIT-1)
-#
-#         return validated_data
-
 class AddUserBrowsingHistorySerializer(serializers.Serializer):
     """
     添加用户浏览历史序列化器
     """
-    sku_id = serializers.IntegerField(label="商品SKU编号", min_value=1, required=True)
+    sku_id = serializers.IntegerField(label="商品SKU编号", min_value=1)
 
     def validate_sku_id(self, value):
         """
@@ -333,12 +315,17 @@ class AddUserBrowsingHistorySerializer(serializers.Serializer):
         """
         user_id = self.context['request'].user.id
         sku_id = validated_data['sku_id']
-        redis_conn = get_redis_connection("default")
+
+        redis_conn = get_redis_connection("history")
+        pl = redis_conn.pipeline()
+
         # 移除已经存在的本商品浏览记录
-        redis_conn.lrem("history_%s" % user_id, 0, sku_id)
+        pl.lrem("history_%s" % user_id, 0, sku_id)
         # 添加新的浏览记录
-        redis_conn.lpush("history_%s" % user_id, sku_id)
+        pl.lpush("history_%s" % user_id, sku_id)
         # 只保存最多5条记录
-        redis_conn.ltrim("history_%s" % user_id, 0, constants.USER_BROWSING_HISTORY_COUNTS_LIMIT-1)
+        pl.ltrim("history_%s" % user_id, 0, constants.USER_BROWSING_HISTORY_COUNTS_LIMIT-1)
+
+        pl.execute()
 
         return validated_data

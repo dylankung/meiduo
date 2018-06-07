@@ -3,7 +3,6 @@ from django_redis import get_redis_connection
 from django.utils import timezone
 from django.db import transaction
 from decimal import Decimal
-from rest_framework.exceptions import ValidationError, APIException
 import logging
 
 from goods.models import SKU
@@ -17,7 +16,7 @@ class CartSKUSerializer(serializers.ModelSerializer):
     """
     购物车商品数据序列化器
     """
-    count = serializers.IntegerField(label='数量', required=True, min_value=1)
+    count = serializers.IntegerField(label='数量')
 
     class Meta:
         model = SKU
@@ -32,7 +31,7 @@ class OrderSettlementSerializer(serializers.Serializer):
     skus = CartSKUSerializer(many=True)
 
 
-class OrderCommitSerializer(serializers.ModelSerializer):
+class SaveOrderSerializer(serializers.ModelSerializer):
     """
     下单数据序列化器
     """
@@ -51,18 +50,21 @@ class OrderCommitSerializer(serializers.ModelSerializer):
             }
         }
 
-    # 使用事务方式一： 装饰器
-    # @transaction.atomic
     def create(self, validated_data):
-        redis_conn = get_redis_connection("default")
-
+        """
+        保存订单
+        """
+        # 获取当前下单用户
         user = self.context['request'].user
 
-        # 组织订单信息 20170903153611+user.id
+        # 组织订单编号 20170903153611+user.id
+        # timezone.now() -> datetime
         order_id = timezone.now().strftime('%Y%m%d%H%M%S') + ('%09d' % user.id)
 
+        address = validated_data['address']
+        pay_method = validated_data['pay_method']
+
         # 生成订单
-        # 使用事务方式二：with语句
         with transaction.atomic():
             # 创建一个保存点
             save_id = transaction.savepoint()
@@ -72,33 +74,32 @@ class OrderCommitSerializer(serializers.ModelSerializer):
                 order = OrderInfo.objects.create(
                     order_id=order_id,
                     user=user,
-                    address=validated_data['address'],
+                    address=address,
                     total_count=0,
                     total_amount=Decimal(0),
                     freight=Decimal(10),
-                    pay_method=validated_data['pay_method'],
-                    status=OrderInfo.ORDER_STATUS_ENUM['UNSEND'] if validated_data['pay_method'] == OrderInfo.PAY_METHODS_ENUM['CASH'] else OrderInfo.ORDER_STATUS_ENUM['UNPAID']
+                    pay_method=pay_method,
+                    status=OrderInfo.ORDER_STATUS_ENUM['UNSEND'] if pay_method == OrderInfo.PAY_METHODS_ENUM['CASH'] else OrderInfo.ORDER_STATUS_ENUM['UNPAID']
                 )
                 # 获取购物车信息
+                redis_conn = get_redis_connection("cart")
                 redis_cart = redis_conn.hgetall("cart_%s" % user.id)
                 cart_selected = redis_conn.smembers('cart_selected_%s' % user.id)
+
                 # 将bytes类型转换为int类型
                 cart = {}
                 for sku_id in cart_selected:
                     cart[int(sku_id)] = int(redis_cart[sku_id])
 
-                total_amount = Decimal("0")
-                total_count = 0
-
-                skus = SKU.objects.filter(id__in=cart.keys())
-
-                # 用于演示并发下单
-                # import time
-                # time.sleep(5)
+                # # 一次查询出所有商品数据
+                # skus = SKU.objects.filter(id__in=cart.keys())
 
                 # 处理订单商品
-                for sku in skus:
+                sku_id_list = cart.keys()
+                for sku_id in sku_id_list:
                     while True:
+                        sku = SKU.objects.get(id=sku_id)
+
                         sku_count = cart[sku.id]
 
                         # 判断库存
@@ -107,9 +108,16 @@ class OrderCommitSerializer(serializers.ModelSerializer):
 
                         if sku_count > origin_stock:
                             transaction.savepoint_rollback(save_id)
-                            raise ValidationError({'detail': '商品库存不足'})
+                            raise serializers.ValidationError('商品库存不足')
+
+                        # 用于演示并发下单
+                        # import time
+                        # time.sleep(5)
 
                         # 减少库存
+                        # sku.stock -= sku_count
+                        # sku.sales += sku_count
+                        # sku.save()
                         new_stock = origin_stock - sku_count
                         new_sales = origin_sales + sku_count
 
@@ -118,12 +126,13 @@ class OrderCommitSerializer(serializers.ModelSerializer):
                         if ret == 0:
                             continue
 
+                        # 累计商品的SPU 销量信息
                         sku.goods.sales += sku_count
                         sku.goods.save()
 
-                        sku_amount = sku.price * sku_count  # 商品金额
-                        total_amount += sku_amount  # 累计总金额
-                        total_count += sku_count  # 累计总额
+                        # 累计订单基本信息的数据
+                        order.total_count += sku_count  # 累计总金额
+                        order.total_amount += (sku.price * sku_count)  # 累计总额
 
                         # 保存订单商品
                         OrderGoods.objects.create(
@@ -137,25 +146,23 @@ class OrderCommitSerializer(serializers.ModelSerializer):
                         break
 
                 # 更新订单的金额数量信息
-                order.total_amount = total_amount
                 order.total_amount += order.freight
-                order.total_count = total_count
                 order.save()
 
-            except ValidationError:
+            except serializers.ValidationError:
                 raise
             except Exception as e:
                 logger.error(e)
                 transaction.savepoint_rollback(save_id)
-                raise APIException('保存订单失败')
+                raise
 
             # 提交事务
             transaction.savepoint_commit(save_id)
 
             # 更新redis中保存的购物车数据
             pl = redis_conn.pipeline()
-            pl.hdel('cart_%s' % user.id, *cart.keys())
-            pl.srem('cart_selected_%s' % user.id, *cart.keys())
+            pl.hdel('cart_%s' % user.id, *cart_selected)
+            pl.srem('cart_selected_%s' % user.id, *cart_selected)
             pl.execute()
             return order
 
@@ -248,7 +255,7 @@ class SaveOrderCommentSerializer(serializers.ModelSerializer):
         sku.goods.save()
 
         # 如果所有订单商品都已评价，则修改订单状态为已完成
-        if OrderGoods.objects.filter(order_id=order_id, is_commented=False).count() == 0:
+        if OrderGoods.objects.filter(order_id=order_id, is_commented=False).count() == 1:
             OrderInfo.objects.filter(order_id=order_id).update(status=OrderInfo.ORDER_STATUS_ENUM['FINISHED'])
 
         return validated_data

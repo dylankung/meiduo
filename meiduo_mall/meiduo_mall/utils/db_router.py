@@ -1,4 +1,4 @@
-class MasterSlaveRouter(object):
+class MasterSlaveDBRouter(object):
     """数据库主从读写分离路由"""
 
     def db_for_read(self, model, **hints):
