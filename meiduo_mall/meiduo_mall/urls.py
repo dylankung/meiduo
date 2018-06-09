@@ -17,7 +17,6 @@ from django.conf.urls import url, include
 # from django.contrib import admin
 import xadmin
 from xadmin.plugins import xversion
-from rest_framework.documentation import include_docs_urls
 
 xadmin.autodiscover()
 xversion.register_models()
@@ -25,7 +24,6 @@ xversion.register_models()
 urlpatterns = [
     # url(r'^admin/', admin.site.urls),
     url(r'^xadmin/', include(xadmin.site.urls)),
-    url(r'^docs/', include_docs_urls(title='美多API')),
     url(r'^', include('verifications.urls')),
     url(r'^', include('users.urls')),
     url(r'^', include('areas.urls')),
