@@ -13,7 +13,7 @@ urlpatterns = [
     url(r'^authorizations/$', views.UserAuthorizeView.as_view()),  # 登录
     url(r'^users/(?P<pk>\d+)/password/$', views.ChangePasswordView.as_view()),  # 修改密码
     url(r'^user/$', views.UserDetailView.as_view()),  # 用户基本信息
-    url(r'^emails/$', views.EmailView.as_view()),  # 设置邮箱
+    url(r'^email/$', views.EmailView.as_view()),  # 设置邮箱
     url(r'^emails/verification/$', views.VerifyEmailView.as_view()),  # 邮箱验证
     url(r'^browse_histories/$', views.UserBrowsingHistoryView.as_view()),  # 浏览历史记录
 ]

@@ -16,10 +16,10 @@ class OAuthQQ(object):
     """
     QQ认证辅助工具类
     """
-    def __init__(self, app_id=None, app_key=None, redirect_uri=None, state=None):
-        self.app_id = app_id or settings.QQ_APP_ID
-        self.app_key = app_key or settings.QQ_APP_KEY
-        self.redirect_url = redirect_uri or settings.QQ_REDIRECT_URL
+    def __init__(self, client_id=None, client_secret=None, redirect_uri=None, state=None):
+        self.client_id = client_id or settings.QQ_CLIENT_ID
+        self.client_secret = client_secret or settings.QQ_CLIENT_SECRET
+        self.redirect_uri = redirect_uri or settings.QQ_REDIRECT_URI
         self.state = state or settings.QQ_STATE  # 用于保存登录成功后的跳转页面路径
 
     def get_qq_login_url(self):
@@ -29,8 +29,8 @@ class OAuthQQ(object):
         """
         params = {
             'response_type': 'code',
-            'client_id': self.app_id,
-            'redirect_uri': self.redirect_url,
+            'client_id': self.client_id,
+            'redirect_uri': self.redirect_uri,
             'state': self.state,
             'scope': 'get_user_info',
         }
@@ -45,10 +45,10 @@ class OAuthQQ(object):
         """
         params = {
             'grant_type': 'authorization_code',
-            'client_id': self.app_id,
-            'client_secret': self.app_key,
+            'client_id': self.client_id,
+            'client_secret': self.client_secret,
             'code': code,
-            'redirect_uri': self.redirect_url
+            'redirect_uri': self.redirect_uri
         }
         url = 'https://graph.qq.com/oauth2.0/token?' + urlencode(params)
         response = urlopen(url)

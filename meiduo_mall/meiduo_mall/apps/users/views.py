@@ -89,17 +89,15 @@ class UserDetailView(RetrieveAPIView):
         return self.request.user
 
 
-class EmailView(CreateAPIView):
+class EmailView(UpdateAPIView):
     """
     保存用户邮箱
     """
     permission_classes = [IsAuthenticated]
+    serializer_class = serializers.EmailSerializer
 
-    # 为了让视图的create方法在对序列化器进行save操作时执行序列化器的update方法，更新user的email属性
-    # 所以重写get_serializer方法，在构造序列化器时将请求的user对象传入
-    # 注意：在视图中，可以通过视图对象self中的request属性获取请求对象
-    def get_serializer(self, *args, **kwargs):
-        return serializers.EmailSerializer(self.request.user, data=self.request.data)
+    def get_object(self, *args, **kwargs):
+        return self.request.user
 
 
 class VerifyEmailView(APIView):

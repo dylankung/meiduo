@@ -17,15 +17,15 @@ from carts.utils import merge_cart_cookie_to_redis
 class QQAuthURLView(APIView):
     """
     获取QQ登录的url
-    前端请求的接口网址  /oauth/qq/authorization/?state=xxxxxxx
+    前端请求的接口网址  /oauth/qq/authorization/?next=xxxxxxx
     state参数是由前端传递，参数值为在QQ登录成功后，用户进入哪个美多商城页面
     """
     def get(self, request):
         """
         提供用于qq登录的url
         """
-        state = request.query_params.get('state')
-        oauth = OAuthQQ(state=state)
+        next = request.query_params.get('next')
+        oauth = OAuthQQ(state=next)
         login_url = oauth.get_qq_login_url()
         return Response({'login_url': login_url})
 
