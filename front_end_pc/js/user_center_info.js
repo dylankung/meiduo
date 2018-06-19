@@ -70,7 +70,7 @@ var vm = new Vue({
                 this.email_error = true;
                 return;
             }
-            axios.post(this.host + '/emails/',
+            axios.put(this.host + '/email/',
                 { email: this.email },
                 {
                     headers: {
