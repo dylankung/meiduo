@@ -251,6 +251,7 @@ LOGGING = {
         'django': {
             'handlers': ['console', 'file'],
             'propagate': True,
+            'level': 'DEBUG'
         },
     }
 }
