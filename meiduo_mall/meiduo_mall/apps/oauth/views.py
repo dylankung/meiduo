@@ -3,7 +3,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework_jwt.settings import api_settings
-from rest_framework.generics import GenericAPIView
+from rest_framework.generics import GenericAPIView, CreateAPIView
 
 from .utils import OAuthQQ
 from .exceptions import QQAPIError
@@ -30,7 +30,10 @@ class QQAuthURLView(APIView):
         return Response({'login_url': login_url})
 
 
-class QQAuthUserView(GenericAPIView):
+# 课件老版本
+# class QQAuthUserView(GenericAPIView):
+# 课件新版本
+class QQAuthUserView(CreateAPIView):
     """
     QQ登录的用户
     """
@@ -79,31 +82,38 @@ class QQAuthUserView(GenericAPIView):
             response = merge_cart_cookie_to_redis(request, user, response)
             return response
 
-    def post(self, request):
-        """
-        保存QQ登录用户数据
-        """
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        user = serializer.save()
+    # 课件老版本
+    # def post(self, request):
+    #     """
+    #     保存QQ登录用户数据
+    #     """
+    #     serializer = self.get_serializer(data=request.data)
+    #     serializer.is_valid(raise_exception=True)
+    #     user = serializer.save()
+    #
+    #     # 生成已登录的token
+    #     jwt_payload_handler = api_settings.JWT_PAYLOAD_HANDLER
+    #     jwt_encode_handler = api_settings.JWT_ENCODE_HANDLER
+    #
+    #     payload = jwt_payload_handler(user)
+    #     token = jwt_encode_handler(payload)
+    #
+    #     response = Response({
+    #         'token': token,
+    #         'user_id': user.id,
+    #         'username': user.username
+    #     })
+    #
+    #     # 合并购物车
+    #     response = merge_cart_cookie_to_redis(request, user, response)
+    #     return response
 
-        # 生成已登录的token
-        jwt_payload_handler = api_settings.JWT_PAYLOAD_HANDLER
-        jwt_encode_handler = api_settings.JWT_ENCODE_HANDLER
-
-        payload = jwt_payload_handler(user)
-        token = jwt_encode_handler(payload)
-
-        response = Response({
-            'token': token,
-            'user_id': user.id,
-            'username': user.username
-        })
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
 
         # 合并购物车
-        response = merge_cart_cookie_to_redis(request, user, response)
+        response = merge_cart_cookie_to_redis(request, self.user, response)
         return response
-
 
 
 
