@@ -189,7 +189,7 @@ var vm = new Vue({
 						sessionStorage.clear();
 						localStorage.clear();
 						localStorage.token = response.data.token;
-						localStorage.user_id = response.data.user_id;
+						localStorage.user_id = response.data.id;
 						localStorage.username = response.data.username;
 						location.href = this.get_query_string('state');	
 					})
