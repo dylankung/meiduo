@@ -313,7 +313,7 @@ FDFS_URL = 'http://image.meiduo.site:8888/'
 FDFS_CLIENT_CONF = os.path.join(BASE_DIR, 'utils/fastdfs/client.conf')
 
 # django文件存储
-DEFAULT_FILE_STORAGE = 'meiduo_mall.utils.fastdfs.fdfs_storage.FasfDFSStorage'
+DEFAULT_FILE_STORAGE = 'meiduo_mall.utils.fastdfs.fdfs_storage.FastfDFSStorage'
 
 
 # 生成的静态html文件保存目录
