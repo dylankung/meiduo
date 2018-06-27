@@ -235,7 +235,7 @@ class AddressViewSet(mixins.CreateModelMixin, mixins.UpdateModelMixin, GenericVi
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(methods=['put'], detail=True)
-    def status(self, request, pk=None, address_id=None):
+    def status(self, request, pk=None):
         """
         设置默认地址
         """
@@ -245,7 +245,7 @@ class AddressViewSet(mixins.CreateModelMixin, mixins.UpdateModelMixin, GenericVi
         return Response({'message': 'OK'}, status=status.HTTP_200_OK)
 
     @action(methods=['put'], detail=True)
-    def title(self, request, pk=None, address_id=None):
+    def title(self, request, pk=None):
         """
         修改标题
         """
