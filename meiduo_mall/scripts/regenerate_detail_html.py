@@ -7,7 +7,6 @@
 """
 import sys
 sys.path.insert(0, '../')
-sys.path.insert(0, '../meiduo_mall/apps')
 
 import os
 if not os.getenv('DJANGO_SETTINGS_MODULE'):
