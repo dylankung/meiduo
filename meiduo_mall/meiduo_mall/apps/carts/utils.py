@@ -20,9 +20,6 @@ def merge_cart_cookie_to_redis(request, user, response):
     # 解析cookie购物车数据
     cookie_cart = pickle.loads(base64.b64decode(cookie_cart.encode()))
 
-    # 获取redis中购物车数据
-    redis_conn = get_redis_connection('cart')
-
     # 用于保存向redis购物车商品数量hash添加数据的字典
     cart = {}
 
@@ -43,6 +40,7 @@ def merge_cart_cookie_to_redis(request, user, response):
             redis_cart_selected_remove.append(sku_id)
 
     if cart:
+        redis_conn = get_redis_connection('cart')
         pl = redis_conn.pipeline()
         pl.hmset('cart_%s' % user.id, cart)
         if redis_cart_selected_add:
