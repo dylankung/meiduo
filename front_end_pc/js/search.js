@@ -88,10 +88,13 @@ var vm = new Vue({
                     responseType: 'json'
                 })
                 .then(response => {
+                    this.skus = [];
                     this.count = response.data.count;
-                    this.skus = response.data.results;
-                    for(var i=0; i<this.skus.length; i++){
-                        this.skus[i].url = '/goods/' + this.skus[i].id + ".html";
+                    var results = response.data.results;
+                    for(var i=0; i< results.length; i++){
+                        var sku = results[i].object;
+                        sku.url = '/goods/' + sku.id + ".html";
+                        this.skus.push(sku);
                     }
                 })
                 .catch(error => {

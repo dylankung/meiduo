@@ -39,9 +39,11 @@ class SKUIndexSerializer(HaystackSerializer):
     """
     SKU索引结果数据序列化器
     """
+    object = SKUSerializer(read_only=True)
+
     class Meta:
         index_classes = [SKUIndex]
-        fields = ('text', 'id', 'name', 'price', 'default_image_url', 'comments')
+        fields = ('text', 'object')
 
 
 class SKUCommentSerializer(serializers.ModelSerializer):
