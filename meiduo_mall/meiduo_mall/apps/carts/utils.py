@@ -22,14 +22,9 @@ def merge_cart_cookie_to_redis(request, user, response):
 
     # 获取redis中购物车数据
     redis_conn = get_redis_connection('cart')
-    redis_cart = redis_conn.hgetall('cart_%s' % user.id)
 
-    # 用于保存最终购物车数据的字典
+    # 用于保存向redis购物车商品数量hash添加数据的字典
     cart = {}
-
-    # 将redis中购物车数据的键值对转换为整型
-    for sku_id, count in redis_cart.items():
-        cart[int(sku_id)] = int(count)
 
     # 记录redis勾选状态中应该增加的sku_id
     redis_cart_selected_add = []
